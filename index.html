@@ -114,6 +114,25 @@
   .btn-ghost:hover{ background:rgba(255,255,255,0.14); }
   .file-name{ font-size:12px; color:#B7B2A4; }
   input[type=file]{ display:none; }
+  .upload-footer-row{ display:flex; gap:14px; flex-wrap:wrap; margin-top:2px; }
+  .link-btn{
+    appearance:none; background:none; border:none; padding:0; cursor:pointer; font-family:inherit;
+    font-size:11.5px; color:#D8B79C; text-decoration:underline; text-underline-offset:2px;
+  }
+  .link-btn:hover{ color:var(--accent); }
+  .settings-panel{
+    display:none; max-width:640px; margin:16px auto 0; background:rgba(255,255,255,0.06);
+    border:1px solid rgba(255,255,255,0.14); border-radius:var(--radius-m); padding:14px 16px;
+  }
+  .settings-panel.show{ display:block; }
+  .settings-row{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:8px; }
+  .settings-label{ font-size:12px; color:#D8D3C6; width:130px; flex:0 0 auto; }
+  .settings-panel input[type=text]{
+    flex:1; min-width:180px; font-family:"IBM Plex Mono",monospace; font-size:12.5px;
+    padding:8px 10px; border-radius:6px; border:1px solid rgba(255,255,255,0.2);
+    background:rgba(0,0,0,0.2); color:#F3F1EA;
+  }
+  .api-status{ font-size:12px; color:#B7B2A4; margin:6px 0 0; }
 
   /* ---------- KPI STRIP ---------- */
   .kpi-strip{
@@ -237,6 +256,7 @@
   tr.row-short{ background:color-mix(in srgb, var(--warn-bg) 55%, transparent); }
   tr.row-over{ background:color-mix(in srgb, var(--over-bg) 55%, transparent); }
   tr.row-noorder{ background:color-mix(in srgb, var(--alert-bg) 55%, transparent); }
+  tr.row-match-hit{ outline:2px solid var(--accent); outline-offset:-2px; }
 
   .empty-state{
     background:var(--surface); border:1.5px dashed var(--line-strong); border-radius:var(--radius-m);
@@ -299,7 +319,23 @@
         </div>
         <input type="file" id="fileInput" accept=".xlsx,.xls">
         <div class="file-name" id="fileNameLbl">ยังไม่ได้อัปโหลด · ลากไฟล์มาวางในกล่องนี้ได้เลย</div>
+        <div class="upload-footer-row">
+          <button class="link-btn" id="settingsToggle" type="button">⚙ ตั้งค่าฐานข้อมูล (Google Sheets)</button>
+          <button class="link-btn" id="syncNowBtn" type="button">🔄 ซิงค์ล่าสุด</button>
+        </div>
       </div>
+    </div>
+    <div class="settings-panel" id="settingsPanel">
+      <div class="settings-row">
+        <label class="settings-label">Web App URL</label>
+        <input type="text" id="apiUrlInput" placeholder="https://script.google.com/macros/s/xxxxx/exec">
+      </div>
+      <div class="settings-row">
+        <label class="settings-label">Token (ถ้าตั้งไว้)</label>
+        <input type="text" id="apiTokenInput" placeholder="ไม่บังคับ">
+        <button class="btn btn-accent btn-sm" id="saveApiBtn" type="button">บันทึกและทดสอบ</button>
+      </div>
+      <p class="api-status" id="apiStatus">ยังไม่ได้ตั้งค่า Google Sheets · ข้อมูลจะถูกเก็บไว้ในเบราว์เซอร์นี้เท่านั้น</p>
     </div>
   </div>
 </div>
@@ -342,7 +378,6 @@
           <th class="num">GOR No.</th>
           <th class="num">รหัส</th>
           <th>ผู้ขาย</th>
-          <th class="num">วันที่สั่ง</th>
           <th class="num">วันที่รับ</th>
           <th class="num">สั่ง</th>
           <th class="num">รับ</th>
@@ -393,6 +428,40 @@ function loadPersisted(){
 function savePersisted(){
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ pos: masterPOsRaw, returns: masterReturns })); }
   catch(e){ /* storage full or unavailable - continue without persisting */ }
+}
+
+/* ---------- Google Sheets backend (Apps Script Web App) ---------- */
+const API_URL_KEY = 'gr_api_url';
+const API_TOKEN_KEY = 'gr_api_token';
+let apiUrl = localStorage.getItem(API_URL_KEY) || '';
+let apiToken = localStorage.getItem(API_TOKEN_KEY) || '';
+
+function apiEndpoint(){
+  if (!apiUrl) return null;
+  if (!apiToken) return apiUrl;
+  return apiUrl + (apiUrl.indexOf('?') >= 0 ? '&' : '?') + 'token=' + encodeURIComponent(apiToken);
+}
+
+async function fetchFromApi(){
+  const url = apiEndpoint();
+  if (!url) throw new Error('ยังไม่ได้ตั้งค่า URL');
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const data = await res.json();
+  if (data && data.error) throw new Error(data.error);
+  return data;
+}
+
+async function postToApi(pos, returns){
+  const url = apiEndpoint();
+  if (!url) throw new Error('ยังไม่ได้ตั้งค่า URL');
+  // Sent without an explicit Content-Type so the browser uses text/plain - this keeps
+  // it a "simple request" and avoids a CORS preflight that Apps Script doesn't handle.
+  const res = await fetch(url, { method: 'POST', body: JSON.stringify({ pos, returns }) });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const data = await res.json();
+  if (data && data.error) throw new Error(data.error);
+  return data;
 }
 
 function poKey(po){ return (po.po||'') + '||' + (po.gor||''); }
@@ -513,7 +582,11 @@ function matchesSearch(po, term){
   if ((po.sname||'').toLowerCase().includes(t)) return true;
   if ((po.sc||'').toLowerCase().includes(t)) return true;
   if ((po.gor||'').toLowerCase().includes(t)) return true;
-  return po.items.some(it => (it.d||'').toLowerCase().includes(t));
+  return po.items.some(it =>
+    (it.d||'').toLowerCase().includes(t) ||
+    (it.c||'').toString().toLowerCase().includes(t) ||
+    (it.b||'').toString().toLowerCase().includes(t)
+  );
 }
 
 function renderList(){
@@ -528,7 +601,7 @@ function renderList(){
     return;
   }
   if (!filtered.length){
-    listEl.innerHTML = `<tr><td colspan="11"><div class="empty-state">
+    listEl.innerHTML = `<tr><td colspan="10"><div class="empty-state">
       <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       <h3>ไม่พบรายการที่ตรงกับเงื่อนไข</h3>
       <div>ลองเปลี่ยนคำค้นหาหรือตัวกรอง</div>
@@ -537,8 +610,15 @@ function renderList(){
   }
 
   listEl.innerHTML = filtered.map((po, idx) => {
-    const itemRows = po.items.map(it => `
-      <tr class="${it.flag !== 'match' ? 'row-'+it.flag : ''}">
+    const t = searchTerm.toLowerCase();
+    const itemRows = po.items.map(it => {
+      const itemMatches = t && (
+        (it.d||'').toLowerCase().includes(t) ||
+        (it.c||'').toString().toLowerCase().includes(t) ||
+        (it.b||'').toString().toLowerCase().includes(t)
+      );
+      return `
+      <tr class="${it.flag !== 'match' ? 'row-'+it.flag : ''}${itemMatches ? ' row-match-hit' : ''}">
         <td>${escapeHtml(it.d)}<div class="po-sub">รหัส ${escapeHtml(it.c||'-')} · บาร์โค้ด ${escapeHtml(it.b||'-')}</div></td>
         <td>${escapeHtml(it.u||'-')}</td>
         <td class="num">${it.p != null ? num(it.p).toLocaleString('th-TH',{minimumFractionDigits:2}) : '-'}</td>
@@ -546,32 +626,35 @@ function renderList(){
         <td class="num">${fmtQty(it.r)}</td>
         <td class="num">${it.variance>0?'+':''}${fmtQty(it.variance)}</td>
         <td><span class="item-flag" style="color:var(--${it.flag==='match'?'ok':it.flag==='short'?'warn':it.flag==='over'?'over':'alert'})"><span class="dot" style="background:var(--${it.flag==='match'?'ok':it.flag==='short'?'warn':it.flag==='over'?'over':'alert'})"></span>${flagLabel(it.flag)}</span></td>
-      </tr>
-    `).join('');
+      </tr>`;
+    }).join('');
 
     const rowId = 'po-' + idx;
     const supplierDisplay = escapeHtml(po.sname || (po.dc ? 'คลังสินค้า DC (ไม่มีชื่อผู้ขาย)' : '-'));
+    // When searching, auto-open every visible PO so a match inside the item list is
+    // immediately visible instead of hidden behind a collapsed row.
+    const autoOpen = !!searchTerm;
 
     return `
-    <tr class="po-row" data-target="${rowId}">
+    <tr class="po-row${autoOpen ? ' open' : ''}" data-target="${rowId}">
       <td><svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><polyline points="9 18 15 12 9 6"/></svg></td>
       <td class="num">${escapeHtml(po.po||'-')}</td>
       <td class="num">${escapeHtml(po.gor||'-')}</td>
       <td class="num supplier-code">${escapeHtml(po.sc||'-')}</td>
       <td class="col-supplier"><span class="supplier-name">${supplierDisplay}</span>${po.dc ? '<span class="dc-tag">DC</span>' : ''}</td>
-      <td class="num">${escapeHtml(po.od||'-')}</td>
       <td class="num">${escapeHtml(po.rd||'-')}</td>
       <td class="num">${fmtQty(po.totalO)}</td>
       <td class="num">${fmtQty(po.totalR)}</td>
       <td class="num">${po.totalVar>0?'+':''}${fmtQty(po.totalVar)}</td>
       <td><span class="flag-badge flag-${po.flag}"><span class="dot"></span>${flagLabel(po.flag)}</span></td>
     </tr>
-    <tr class="po-detail-row" id="${rowId}">
-      <td colspan="11">
+    <tr class="po-detail-row${autoOpen ? ' show' : ''}" id="${rowId}">
+      <td colspan="10">
         <div class="po-body">
           <div class="po-detail-meta">
             <span>ประเภท: <b>${escapeHtml(po.type||'-')}</b></span>
             <span>สถานะ: <b>${escapeHtml(po.status||'-')}</b></span>
+            <span>วันที่สั่ง: <b>${escapeHtml(po.od||'-')}</b></span>
             <span>จำนวนรายการสินค้า: <b>${po.items.length}</b></span>
           </div>
           <table class="items">
@@ -698,15 +781,33 @@ document.getElementById('resetRangeBtn').addEventListener('click', () => {
   setupDateRangeBounds();
   applyFiltersAndRender();
 });
-document.getElementById('clearDataBtn').addEventListener('click', () => {
-  if (!confirm('ล้างข้อมูลที่สะสมไว้ทั้งหมดในเบราว์เซอร์นี้ใช่หรือไม่? (ไฟล์ต้นฉบับจะไม่หายไป แต่ต้องอัปโหลดใหม่)')) return;
+document.getElementById('clearDataBtn').addEventListener('click', async () => {
+  const msg = apiUrl
+    ? 'ล้างข้อมูลที่แคชไว้ในเบราว์เซอร์นี้ใช่หรือไม่? (ข้อมูลบน Google Sheets จะไม่หายไป ระบบจะโหลดจาก Sheets ใหม่ทันที)'
+    : 'ล้างข้อมูลที่สะสมไว้ทั้งหมดในเบราว์เซอร์นี้ใช่หรือไม่? (ไฟล์ต้นฉบับจะไม่หายไป แต่ต้องอัปโหลดใหม่)';
+  if (!confirm(msg)) return;
   try { localStorage.removeItem(STORAGE_KEY); } catch(e){}
   masterPOsRaw = []; masterReturns = [];
-  usingSample = true;
   document.getElementById('dateFrom').value = ''; document.getElementById('dateTo').value = '';
   lastAutoFrom = null; lastAutoTo = null;
-  document.getElementById('fileNameLbl').textContent = 'ล้างข้อมูลแล้ว · ยังไม่ได้อัปโหลด';
-  loadData(SAMPLE_DATA.pos, SAMPLE_DATA.returns, { replace: true, persist: false });
+
+  if (apiUrl){
+    document.getElementById('fileNameLbl').textContent = 'ล้างแคชแล้ว กำลังโหลดข้อมูลจาก Google Sheets ใหม่...';
+    try {
+      const data = await fetchFromApi();
+      usingSample = false;
+      loadData(data.pos || [], data.returns || [], { replace: true, persist: true });
+      document.getElementById('fileNameLbl').textContent = `โหลดจาก Google Sheets สำเร็จ (${(data.pos||[]).length} PO)`;
+    } catch(err){
+      usingSample = true;
+      document.getElementById('fileNameLbl').textContent = 'โหลดจาก Google Sheets ไม่สำเร็จ: ' + err.message;
+      loadData(SAMPLE_DATA.pos, SAMPLE_DATA.returns, { replace: true, persist: false });
+    }
+  } else {
+    usingSample = true;
+    document.getElementById('fileNameLbl').textContent = 'ล้างข้อมูลแล้ว · ยังไม่ได้อัปโหลด';
+    loadData(SAMPLE_DATA.pos, SAMPLE_DATA.returns, { replace: true, persist: false });
+  }
 });
 
 /* ---------- Tabs & search ---------- */
@@ -721,6 +822,52 @@ document.getElementById('tabs').addEventListener('click', e => {
 document.getElementById('searchBox').addEventListener('input', e => {
   searchTerm = e.target.value.trim();
   renderList();
+});
+
+/* ---------- Google Sheets settings panel ---------- */
+document.getElementById('apiUrlInput').value = apiUrl;
+document.getElementById('apiTokenInput').value = apiToken;
+if (apiUrl){
+  document.getElementById('apiStatus').textContent = 'ตั้งค่าไว้แล้ว กำลังตรวจสอบการเชื่อมต่อ...';
+}
+document.getElementById('settingsToggle').addEventListener('click', () => {
+  document.getElementById('settingsPanel').classList.toggle('show');
+});
+document.getElementById('saveApiBtn').addEventListener('click', async () => {
+  apiUrl = document.getElementById('apiUrlInput').value.trim();
+  apiToken = document.getElementById('apiTokenInput').value.trim();
+  localStorage.setItem(API_URL_KEY, apiUrl);
+  localStorage.setItem(API_TOKEN_KEY, apiToken);
+  const statusEl = document.getElementById('apiStatus');
+  if (!apiUrl){
+    statusEl.textContent = 'ยังไม่ได้ตั้งค่า Google Sheets · ข้อมูลจะถูกเก็บไว้ในเบราว์เซอร์นี้เท่านั้น';
+    return;
+  }
+  statusEl.textContent = 'กำลังทดสอบการเชื่อมต่อ...';
+  try {
+    const data = await fetchFromApi();
+    statusEl.textContent = `เชื่อมต่อสำเร็จ ✓ พบข้อมูล ${(data.pos||[]).length} PO บน Google Sheets`;
+    usingSample = false;
+    loadData(data.pos || [], data.returns || [], { replace: true, persist: true });
+  } catch(err){
+    statusEl.textContent = 'เชื่อมต่อไม่สำเร็จ: ' + err.message + ' (ตรวจสอบ URL และการ Deploy ของ Apps Script)';
+  }
+});
+document.getElementById('syncNowBtn').addEventListener('click', async () => {
+  if (!apiUrl){
+    document.getElementById('settingsPanel').classList.add('show');
+    document.getElementById('apiStatus').textContent = 'กรุณาตั้งค่า Google Sheets ก่อนจึงจะซิงค์ได้';
+    return;
+  }
+  document.getElementById('fileNameLbl').textContent = 'กำลังซิงค์ข้อมูลล่าสุดจาก Google Sheets...';
+  try {
+    const data = await fetchFromApi();
+    usingSample = false;
+    loadData(data.pos || [], data.returns || [], { replace: true, persist: true });
+    document.getElementById('fileNameLbl').textContent = `ซิงค์ล่าสุดสำเร็จ (${(data.pos||[]).length} PO)`;
+  } catch(err){
+    document.getElementById('fileNameLbl').textContent = 'ซิงค์ไม่สำเร็จ: ' + err.message;
+  }
 });
 
 /* ---------- Excel parsing (mirrors GORL20 / GORL29 / GORL35 export layout) ---------- */
@@ -856,25 +1003,44 @@ function handleFile(file){
   if (!file) return;
   document.getElementById('fileNameLbl').textContent = 'กำลังประมวลผล ' + file.name + ' ...';
   const reader = new FileReader();
-  reader.onload = (e) => {
+  reader.onload = async (e) => {
+    let pos, returns;
     try {
       const data = new Uint8Array(e.target.result);
       const wb = XLSX.read(data, { type: 'array' });
-      const { pos, returns } = parseWorkbook(wb);
+      ({ pos, returns } = parseWorkbook(wb));
       if (!pos.length){
         document.getElementById('fileNameLbl').textContent = 'ไม่พบรูปแบบรายงาน GORL 20 ในไฟล์นี้ ลองตรวจสอบไฟล์อีกครั้ง';
         return;
       }
-      // The very first real upload replaces the demo sample; every upload after that
-      // is added to the running history so the date-range filter has something to filter.
-      const replace = usingSample;
-      usingSample = false;
-      loadData(pos, returns, { replace, persist: true });
-      const daysNow = new Set(masterPOsRaw.map(p => p.rd).filter(Boolean)).size;
-      document.getElementById('fileNameLbl').textContent =
-        `โหลดสำเร็จ: ${file.name} (${pos.length} PO) · มีข้อมูลสะสม ${daysNow} วัน`;
     } catch (err){
       document.getElementById('fileNameLbl').textContent = 'เกิดข้อผิดพลาดในการอ่านไฟล์: ' + err.message;
+      return;
+    }
+
+    if (apiUrl){
+      document.getElementById('fileNameLbl').textContent = 'กำลังบันทึกขึ้น Google Sheets...';
+      try {
+        const fresh = await postToApi(pos, returns);
+        usingSample = false;
+        loadData(fresh.pos || [], fresh.returns || [], { replace: true, persist: true });
+        document.getElementById('fileNameLbl').textContent =
+          `บันทึกขึ้น Google Sheets สำเร็จ (ไฟล์นี้ ${pos.length} PO · รวมทั้งหมด ${(fresh.pos||[]).length} PO)`;
+        return;
+      } catch(err){
+        document.getElementById('fileNameLbl').textContent =
+          'บันทึกขึ้น Google Sheets ไม่สำเร็จ (' + err.message + ') · เก็บไว้ในเบราว์เซอร์นี้ก่อน';
+        // fall through to the local-only path below so the upload isn't lost
+      }
+    }
+
+    const replace = usingSample;
+    usingSample = false;
+    loadData(pos, returns, { replace, persist: true });
+    if (!apiUrl){
+      const daysNow = new Set(masterPOsRaw.map(p => p.rd).filter(Boolean)).size;
+      document.getElementById('fileNameLbl').textContent =
+        `โหลดสำเร็จ: ${file.name} (${pos.length} PO) · มีข้อมูลสะสม ${daysNow} วัน (เก็บในเบราว์เซอร์นี้เท่านั้น)`;
     }
   };
   reader.readAsArrayBuffer(file);
@@ -884,8 +1050,22 @@ fileInput.addEventListener('change', e => handleFile(e.target.files[0]));
 ['dragleave','drop'].forEach(ev => uploadBox.addEventListener(ev, e => { e.preventDefault(); uploadBox.classList.remove('dragover'); }));
 uploadBox.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f) handleFile(f); });
 
-/* ---------- Init: restore previously uploaded days if this browser has any, else show the demo sample ---------- */
-(function init(){
+/* ---------- Init: prefer Google Sheets when configured, else local history, else the demo sample ---------- */
+(async function init(){
+  if (apiUrl){
+    document.getElementById('fileNameLbl').textContent = 'กำลังโหลดข้อมูลจาก Google Sheets...';
+    try {
+      const data = await fetchFromApi();
+      usingSample = false;
+      loadData(data.pos || [], data.returns || [], { replace: true, persist: true });
+      document.getElementById('fileNameLbl').textContent = `เชื่อมต่อ Google Sheets สำเร็จ (${(data.pos||[]).length} PO)`;
+      document.getElementById('apiStatus').textContent = `เชื่อมต่อสำเร็จ ✓ พบข้อมูล ${(data.pos||[]).length} PO บน Google Sheets`;
+      return;
+    } catch(err){
+      document.getElementById('apiStatus').textContent =
+        'เชื่อมต่อไม่สำเร็จ: ' + err.message + ' · ใช้ข้อมูลที่เก็บไว้ในเบราว์เซอร์นี้แทนไปก่อน';
+    }
+  }
   const persisted = loadPersisted();
   if (persisted && persisted.pos && persisted.pos.length){
     usingSample = false;
