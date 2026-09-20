@@ -884,6 +884,34 @@ function cellStr(row, idx){
   return v;
 }
 
+// Finds the column index of a cell whose trimmed text exactly matches `label`.
+// The report's column widths shift between stores/exports (seen: 23-col and
+// 29-col layouts of the same GORL20 report), so every field is located by its
+// label text rather than a fixed column number.
+function findLabelIdx(row, label){
+  for (let i = 0; i < row.length; i++){
+    if (cellStr(row, i) === label) return i;
+  }
+  return -1;
+}
+// Returns the first non-empty cell to the right of a label's column (the label
+// and its value are printed a few columns apart, with blank cells between).
+function valueAfterLabel(row, label){
+  const idx = findLabelIdx(row, label);
+  if (idx < 0) return null;
+  for (let i = idx + 1; i < row.length; i++){
+    const v = cellStr(row, i);
+    if (v !== null) return v;
+  }
+  return null;
+}
+function cleanBarcode(v){
+  if (v == null) return null;
+  let s = String(v);
+  if (s.endsWith('.0')) s = s.slice(0, -2);
+  return s;
+}
+
 function parseGORL20Sheet(rows){
   const pos = [];
   let i = 0;
@@ -893,30 +921,40 @@ function parseGORL20Sheet(rows){
     const c1 = cellStr(row, 1);
     if (c1 && String(c1).indexOf('Goods Received Summary') !== -1){
       let block = { items: [] };
-      let j = i, limit = Math.min(i + 12, n), itemHeaderIdx = null;
+      let j = i, limit = Math.min(i + 12, n), itemHeaderIdx = null, itemCols = null;
       while (j < limit){
         const r = rows[j] || [];
         const c0 = cellStr(r, 0);
         if (c0 === 'To Store'){
           block.store = cellStr(r, 1);
-          block.po = cellStr(r, 9);
-          block.type = cellStr(r, 12);
-          block.status = cellStr(r, 18);
+          block.po = valueAfterLabel(r, 'Order:');
+          block.type = valueAfterLabel(r, 'Type:');
+          block.status = valueAfterLabel(r, 'Status:');
         } else if (c0 === 'Supplier:'){
           block.supplierRaw = cellStr(r, 1);
-          block.od = cellStr(r, 9);
-          block.rd = cellStr(r, 18);
+          block.od = valueAfterLabel(r, 'Order Date:');
+          block.rd = valueAfterLabel(r, 'Received Date:');
         } else if (c0 === 'Supplier Name'){
           block.sname = cellStr(r, 1);
         } else if (c0 === 'Address'){
-          block.gor = cellStr(r, 9);
+          block.gor = valueAfterLabel(r, 'GOR No:');
         } else if (c0 === 'Item Description'){
           itemHeaderIdx = j;
+          // Description is always the row's first column; everything else is
+          // located by its header label so column-width shifts don't matter.
+          itemCols = {
+            unit: findLabelIdx(r, 'Makro Unit'),
+            price: findLabelIdx(r, 'Selling Price'),
+            code: findLabelIdx(r, 'Item'),
+            barcode: findLabelIdx(r, 'Barcode'),
+            ordered: findLabelIdx(r, 'Ordered'),
+            received: findLabelIdx(r, 'Received'),
+          };
           break;
         }
         j++;
       }
-      if (itemHeaderIdx !== null){
+      if (itemHeaderIdx !== null && itemCols){
         let k = itemHeaderIdx + 2;
         while (k < n){
           const r = rows[k] || [];
@@ -925,12 +963,12 @@ function parseGORL20Sheet(rows){
           if (!c0 || c0.indexOf('TOTAL') !== -1) break;
           block.items.push({
             d: c0,
-            u: cellStr(r, 2),
-            p: cellStr(r, 5),
-            c: cellStr(r, 7),
-            b: (() => { const bv = cellStr(r, 8); if (bv == null) return null; let s = String(bv); if (s.endsWith('.0')) s = s.slice(0,-2); return s; })(),
-            o: cellStr(r, 10),
-            r: cellStr(r, 13),
+            u: itemCols.unit >= 0 ? cellStr(r, itemCols.unit) : null,
+            p: itemCols.price >= 0 ? cellStr(r, itemCols.price) : null,
+            c: itemCols.code >= 0 ? cellStr(r, itemCols.code) : null,
+            b: itemCols.barcode >= 0 ? cleanBarcode(cellStr(r, itemCols.barcode)) : null,
+            o: itemCols.ordered >= 0 ? cellStr(r, itemCols.ordered) : null,
+            r: itemCols.received >= 0 ? cellStr(r, itemCols.received) : null,
           });
           k++;
         }
