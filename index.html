@@ -481,6 +481,11 @@ function mergeReturns(existing, incoming){
 }
 
 function num(v){ const n = parseFloat(v); return isNaN(n) ? 0 : n; }
+// Google Sheets silently converts numeric-looking text (PO no., supplier code, item
+// code, barcode...) into real numbers when it stores them, so anything read back from
+// the API might arrive as a number instead of a string. Coerce before calling string
+// methods (.trim, .toLowerCase, etc.) on any field that came from the API.
+function str(v){ return (v === null || v === undefined) ? '' : String(v); }
 
 /* dd-mm-yyyy (as printed in the GR report) -> Date, or null if unparsable */
 function parseRptDate(s){
@@ -509,10 +514,10 @@ function classifyItem(o, r){
 const SEVERITY = { noorder:4, short:3, over:2, match:1 };
 
 function isDC(sc, sname){
-  if (!sc) return false;
-  const code = sc.trim();
+  const code = str(sc).trim();
+  if (!code) return false;
   if (code === '920' || code === '890') return true;
-  if (sname && sname.indexOf('คลังสินค้า') !== -1) return true;
+  if (str(sname).indexOf('คลังสินค้า') !== -1) return true;
   return false;
 }
 
@@ -578,14 +583,14 @@ function renderKPI(stats){
 function matchesSearch(po, term){
   if (!term) return true;
   const t = term.toLowerCase();
-  if ((po.po||'').toLowerCase().includes(t)) return true;
-  if ((po.sname||'').toLowerCase().includes(t)) return true;
-  if ((po.sc||'').toLowerCase().includes(t)) return true;
-  if ((po.gor||'').toLowerCase().includes(t)) return true;
+  if (str(po.po).toLowerCase().includes(t)) return true;
+  if (str(po.sname).toLowerCase().includes(t)) return true;
+  if (str(po.sc).toLowerCase().includes(t)) return true;
+  if (str(po.gor).toLowerCase().includes(t)) return true;
   return po.items.some(it =>
-    (it.d||'').toLowerCase().includes(t) ||
-    (it.c||'').toString().toLowerCase().includes(t) ||
-    (it.b||'').toString().toLowerCase().includes(t)
+    str(it.d).toLowerCase().includes(t) ||
+    str(it.c).toLowerCase().includes(t) ||
+    str(it.b).toLowerCase().includes(t)
   );
 }
 
@@ -613,9 +618,9 @@ function renderList(){
     const t = searchTerm.toLowerCase();
     const itemRows = po.items.map(it => {
       const itemMatches = t && (
-        (it.d||'').toLowerCase().includes(t) ||
-        (it.c||'').toString().toLowerCase().includes(t) ||
-        (it.b||'').toString().toLowerCase().includes(t)
+        str(it.d).toLowerCase().includes(t) ||
+        str(it.c).toLowerCase().includes(t) ||
+        str(it.b).toLowerCase().includes(t)
       );
       return `
       <tr class="${it.flag !== 'match' ? 'row-'+it.flag : ''}${itemMatches ? ' row-match-hit' : ''}">
