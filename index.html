@@ -89,14 +89,30 @@
     display:flex; align-items:center; gap:6px;
   }
   .meta-chip b{ color:#fff; font-weight:600; }
+  .admin-toggle-wrap{ display:flex; flex-direction:column; align-items:flex-end; gap:8px; min-width:270px; }
+  .admin-toggle-btn{
+    appearance:none; cursor:pointer; font-family:inherit; font-weight:600; font-size:12.5px;
+    padding:9px 14px; border-radius:999px; background:rgba(255,255,255,0.08); color:#F3F1EA;
+    border:1px solid rgba(255,255,255,0.18); display:flex; align-items:center; gap:8px; white-space:nowrap;
+  }
+  .admin-toggle-btn:hover{ background:rgba(255,255,255,0.14); }
+  .admin-toggle-btn .chev-mini{ transition:transform .15s ease; flex:0 0 auto; }
+  .admin-toggle-btn.open .chev-mini{ transform:rotate(180deg); }
+  .upload-success-badge{
+    display:inline-flex; align-items:center; gap:4px; background:rgba(46,125,79,0.28); color:#9BE8B8;
+    padding:3px 10px; border-radius:999px; font-size:11px; font-weight:700;
+  }
   .upload-box{
     background:rgba(255,255,255,0.05);
     border:1.5px dashed rgba(240,132,74,0.55);
     border-radius:var(--radius-m);
     padding:14px 16px;
     min-width:270px;
-    display:flex; flex-direction:column; gap:8px;
+    width:100%;
+    flex-direction:column; gap:8px;
+    display:none;
   }
+  .upload-box.show{ display:flex; }
   .upload-box.dragover{ background:rgba(221,106,46,0.14); border-color:var(--accent); }
   .upload-title{ font-size:13px; font-weight:600; color:#F3F1EA; }
   .upload-hint{ font-size:11.5px; color:#9C978A; margin-top:-4px; }
@@ -133,6 +149,7 @@
     background:rgba(0,0,0,0.2); color:#F3F1EA;
   }
   .api-status{ font-size:12px; color:#B7B2A4; margin:6px 0 0; }
+  .file-name.success{ color:#9BE8B8; font-weight:600; }
 
   /* ---------- KPI STRIP ---------- */
   .kpi-strip{
@@ -285,6 +302,8 @@
     .hero h1{ font-size:22px; }
     .hero{ padding:26px 0 22px; }
     .hero-top{ flex-direction:column; }
+    .admin-toggle-wrap{ width:100%; align-items:stretch; }
+    .admin-toggle-btn{ justify-content:space-between; }
     .upload-box{ width:100%; min-width:0; }
     .upload-row{ flex-direction:column; align-items:stretch; }
     .upload-row .btn{ width:100%; text-align:center; }
@@ -310,18 +329,25 @@
         <p class="sub">เทียบยอดสั่งซื้อกับยอดรับจริงทุกใบ อัตโนมัติ ชี้เป้ารายการรับขาด รับเกิน และของที่รับเข้ามาโดยไม่มีใบสั่งซื้อ</p>
         <div class="hero-meta" id="metaChips"></div>
       </div>
-      <div class="upload-box" id="uploadBox">
-        <div class="upload-title">อัปโหลดไฟล์รายงานวันนี้</div>
-        <div class="upload-hint">รองรับไฟล์ GORL 20 (.xlsx) ที่ export จากระบบทุกวัน</div>
-        <div class="upload-row">
-          <button class="btn btn-accent" id="uploadBtn" type="button">เลือกไฟล์ .xlsx</button>
-          <button class="btn btn-ghost" id="sampleBtn" type="button">ใช้ไฟล์ตัวอย่าง</button>
-        </div>
-        <input type="file" id="fileInput" accept=".xlsx,.xls">
-        <div class="file-name" id="fileNameLbl">ยังไม่ได้อัปโหลด · ลากไฟล์มาวางในกล่องนี้ได้เลย</div>
-        <div class="upload-footer-row">
-          <button class="link-btn" id="settingsToggle" type="button">⚙ ตั้งค่าฐานข้อมูล (Google Sheets)</button>
-          <button class="link-btn" id="syncNowBtn" type="button">🔄 ซิงค์ล่าสุด</button>
+      <div class="admin-toggle-wrap">
+        <button class="admin-toggle-btn" id="adminToggleBtn" type="button">
+          <span>⚙ อัปโหลดไฟล์ / ตั้งค่า (สำหรับแอดมิน)</span>
+          <svg class="chev-mini" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="6 9 12 15 18 9"/></svg>
+          <span class="upload-success-badge" id="uploadSuccessBadge" style="display:none">✓ อัปโหลดล่าสุดสำเร็จ</span>
+        </button>
+        <div class="upload-box" id="uploadBox">
+          <div class="upload-title">อัปโหลดไฟล์รายงานวันนี้</div>
+          <div class="upload-hint">รองรับไฟล์ GORL 20 (.xlsx) ที่ export จากระบบทุกวัน</div>
+          <div class="upload-row">
+            <button class="btn btn-accent" id="uploadBtn" type="button">เลือกไฟล์ .xlsx</button>
+            <button class="btn btn-ghost" id="sampleBtn" type="button">ใช้ไฟล์ตัวอย่าง</button>
+          </div>
+          <input type="file" id="fileInput" accept=".xlsx,.xls">
+          <div class="file-name" id="fileNameLbl">ยังไม่ได้อัปโหลด · ลากไฟล์มาวางในกล่องนี้ได้เลย</div>
+          <div class="upload-footer-row">
+            <button class="link-btn" id="settingsToggle" type="button">⚙ ตั้งค่าฐานข้อมูล (Google Sheets)</button>
+            <button class="link-btn" id="syncNowBtn" type="button">🔄 ซิงค์ล่าสุด</button>
+          </div>
         </div>
       </div>
     </div>
@@ -347,6 +373,7 @@
     <div class="daterange">
       <label>ตั้งแต่ <input type="date" id="dateFrom"></label>
       <label>ถึง <input type="date" id="dateTo"></label>
+      <button class="btn btn-accent btn-sm" id="applyRangeBtn" type="button">🔍 ค้นหา</button>
       <button class="btn btn-ghost btn-sm" id="resetRangeBtn" type="button">แสดงทั้งหมด</button>
     </div>
     <button class="btn btn-ghost btn-sm" id="clearDataBtn" type="button">ล้างข้อมูลสะสม</button>
@@ -431,9 +458,14 @@ function savePersisted(){
 }
 
 /* ---------- Google Sheets backend (Apps Script Web App) ---------- */
+// Baked-in shared Web App URL: every visitor who has never opened Settings in their own
+// browser falls back to this, so the whole team reads the same live Google Sheet by
+// default instead of only whoever configured it locally. Set this to your deployed
+// Apps Script /exec URL, then re-publish index.html.
+const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbxkDsPw_IojayGY2wquENJwb-4oWyoto_e0ZZMf9pMg6_72HC7kZtGE0CnVBbbq6J9nxw/exec';
 const API_URL_KEY = 'gr_api_url';
 const API_TOKEN_KEY = 'gr_api_token';
-let apiUrl = localStorage.getItem(API_URL_KEY) || '';
+let apiUrl = localStorage.getItem(API_URL_KEY) || DEFAULT_API_URL;
 let apiToken = localStorage.getItem(API_TOKEN_KEY) || '';
 
 function apiEndpoint(){
@@ -503,6 +535,18 @@ function toInputDate(d){
 function toThaiDate(d){
   const dd = String(d.getDate()).padStart(2,'0'), mm = String(d.getMonth()+1).padStart(2,'0');
   return `${dd}-${mm}-${d.getFullYear()}`;
+}
+// Google Sheets silently turns date-like text (e.g. "15-09-2026") into a real Date cell,
+// so a value read back from the API can arrive as a JS Date or as the ISO timestamp string
+// JSON.stringify makes from one (e.g. "2026-09-14T17:00:00.000Z") instead of the plain
+// dd-mm-yyyy text the report prints. Normalize anything we get back to dd-mm-yyyy so both
+// the table display and parseRptDate() (which only understands dd-mm-yyyy) work either way.
+function normalizeRptDateStr(v){
+  if (v === null || v === undefined || v === '') return v;
+  if (typeof v === 'string' && /^\d{1,2}-\d{1,2}-\d{4}$/.test(v.trim())) return v.trim();
+  const d = (v instanceof Date) ? v : new Date(v);
+  if (!isNaN(d.getTime())) return toThaiDate(d);
+  return v;
 }
 
 function classifyItem(o, r){
@@ -768,7 +812,15 @@ function loadData(rawPOs, rawReturns, opts){
   const replace = !!opts.replace;
   const persist = opts.persist !== false;
 
-  masterPOsRaw = replace ? (rawPOs || []) : mergePOs(masterPOsRaw, rawPOs || []);
+  // Drop rows with neither a PO no. nor a GOR no. - these are corrupted/blank records
+  // (e.g. left over in the sheet from before the parser was fixed) and should never be
+  // shown as a real receipt line. Also normalize date fields in case they came back from
+  // Google Sheets as a Date/ISO timestamp instead of plain dd-mm-yyyy text.
+  const cleanedPOs = (rawPOs || [])
+    .filter(po => po && (po.po || po.gor))
+    .map(po => ({ ...po, rd: normalizeRptDateStr(po.rd), od: normalizeRptDateStr(po.od) }));
+
+  masterPOsRaw = replace ? cleanedPOs : mergePOs(masterPOsRaw, cleanedPOs);
   masterReturns = replace ? (rawReturns || []) : mergeReturns(masterReturns, rawReturns || []);
 
   setupDateRangeBounds();
@@ -777,8 +829,17 @@ function loadData(rawPOs, rawReturns, opts){
 }
 
 /* ---------- Date range controls ---------- */
-document.getElementById('dateFrom').addEventListener('change', () => { lastAutoFrom = null; applyFiltersAndRender(); });
-document.getElementById('dateTo').addEventListener('change', () => { lastAutoTo = null; applyFiltersAndRender(); });
+// Picking a date just marks the range as manually chosen; the filter is applied only when
+// the user presses "ค้นหา" (or Enter), so choosing a wide range of accumulated days doesn't
+// re-render on every single click.
+document.getElementById('dateFrom').addEventListener('change', () => { lastAutoFrom = null; });
+document.getElementById('dateTo').addEventListener('change', () => { lastAutoTo = null; });
+document.getElementById('applyRangeBtn').addEventListener('click', () => { applyFiltersAndRender(); });
+['dateFrom','dateTo'].forEach(id => {
+  document.getElementById(id).addEventListener('keydown', e => {
+    if (e.key === 'Enter'){ e.preventDefault(); applyFiltersAndRender(); }
+  });
+});
 document.getElementById('resetRangeBtn').addEventListener('click', () => {
   lastAutoFrom = null; lastAutoTo = null;
   document.getElementById('dateFrom').value = '';
@@ -835,9 +896,21 @@ document.getElementById('apiTokenInput').value = apiToken;
 if (apiUrl){
   document.getElementById('apiStatus').textContent = 'ตั้งค่าไว้แล้ว กำลังตรวจสอบการเชื่อมต่อ...';
 }
+document.getElementById('adminToggleBtn').addEventListener('click', () => {
+  document.getElementById('uploadBox').classList.toggle('show');
+  document.getElementById('adminToggleBtn').classList.toggle('open');
+});
 document.getElementById('settingsToggle').addEventListener('click', () => {
   document.getElementById('settingsPanel').classList.toggle('show');
 });
+function markUploadSuccess(){
+  document.getElementById('uploadSuccessBadge').style.display = 'inline-flex';
+  document.getElementById('fileNameLbl').classList.add('success');
+}
+function clearUploadSuccess(){
+  document.getElementById('uploadSuccessBadge').style.display = 'none';
+  document.getElementById('fileNameLbl').classList.remove('success');
+}
 document.getElementById('saveApiBtn').addEventListener('click', async () => {
   apiUrl = document.getElementById('apiUrlInput').value.trim();
   apiToken = document.getElementById('apiTokenInput').value.trim();
@@ -976,7 +1049,9 @@ function parseGORL20Sheet(rows){
       const m = (block.supplierRaw || '').match(/^(\d+)/);
       block.sc = m ? m[1] : '';
       delete block.supplierRaw;
-      pos.push(block);
+      // Skip blocks where neither a PO no. nor a GOR no. was found - these aren't a real
+      // receipt line and would otherwise show up as a bogus "-" row in the table.
+      if (block.po || block.gor) pos.push(block);
       i = j;
     } else {
       i++;
@@ -1044,6 +1119,7 @@ document.getElementById('sampleBtn').addEventListener('click', () => {
 
 function handleFile(file){
   if (!file) return;
+  clearUploadSuccess();
   document.getElementById('fileNameLbl').textContent = 'กำลังประมวลผล ' + file.name + ' ...';
   const reader = new FileReader();
   reader.onload = async (e) => {
@@ -1069,6 +1145,7 @@ function handleFile(file){
         loadData(fresh.pos || [], fresh.returns || [], { replace: true, persist: true });
         document.getElementById('fileNameLbl').textContent =
           `บันทึกขึ้น Google Sheets สำเร็จ (ไฟล์นี้ ${pos.length} PO · รวมทั้งหมด ${(fresh.pos||[]).length} PO)`;
+        markUploadSuccess();
         return;
       } catch(err){
         document.getElementById('fileNameLbl').textContent =
@@ -1084,6 +1161,7 @@ function handleFile(file){
       const daysNow = new Set(masterPOsRaw.map(p => p.rd).filter(Boolean)).size;
       document.getElementById('fileNameLbl').textContent =
         `โหลดสำเร็จ: ${file.name} (${pos.length} PO) · มีข้อมูลสะสม ${daysNow} วัน (เก็บในเบราว์เซอร์นี้เท่านั้น)`;
+      markUploadSuccess();
     }
   };
   reader.readAsArrayBuffer(file);
@@ -1093,31 +1171,40 @@ fileInput.addEventListener('change', e => handleFile(e.target.files[0]));
 ['dragleave','drop'].forEach(ev => uploadBox.addEventListener(ev, e => { e.preventDefault(); uploadBox.classList.remove('dragover'); }));
 uploadBox.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f) handleFile(f); });
 
-/* ---------- Init: prefer Google Sheets when configured, else local history, else the demo sample ---------- */
+/* ---------- Init: render something instantly (cache/sample), then refresh from Google
+   Sheets in the background ---------- */
+// A Google Sheets request always has to round-trip to an Apps Script server and read the
+// whole sheet, so it's seconds slower than localStorage, which is instant and local. To
+// avoid a blank/loading page for that whole time, we render whatever this browser already
+// has cached first (or the bundled sample if nothing is cached yet), then fetch the live
+// data in the background and swap it in the moment it arrives - the table never sits empty
+// waiting on the network.
 (async function init(){
+  const persisted = loadPersisted();
+  if (persisted && persisted.pos && persisted.pos.length){
+    usingSample = false;
+    document.getElementById('fileNameLbl').textContent =
+      `กำลังแสดงข้อมูลที่บันทึกไว้ล่าสุด (${persisted.pos.length} PO)` + (apiUrl ? ' · กำลังซิงค์ข้อมูลล่าสุดจาก Google Sheets...' : '');
+    loadData(persisted.pos, persisted.returns || [], { replace: true, persist: false });
+  } else {
+    usingSample = true;
+    document.getElementById('fileNameLbl').textContent = apiUrl
+      ? 'กำลังโหลดข้อมูลจาก Google Sheets... (ระหว่างนี้แสดงข้อมูลตัวอย่างไปก่อน)'
+      : 'ยังไม่ได้อัปโหลด · ลากไฟล์มาวางในกล่องนี้ได้เลย';
+    loadData(SAMPLE_DATA.pos, SAMPLE_DATA.returns, { replace: true, persist: false });
+  }
+
   if (apiUrl){
-    document.getElementById('fileNameLbl').textContent = 'กำลังโหลดข้อมูลจาก Google Sheets...';
     try {
       const data = await fetchFromApi();
       usingSample = false;
       loadData(data.pos || [], data.returns || [], { replace: true, persist: true });
       document.getElementById('fileNameLbl').textContent = `เชื่อมต่อ Google Sheets สำเร็จ (${(data.pos||[]).length} PO)`;
       document.getElementById('apiStatus').textContent = `เชื่อมต่อสำเร็จ ✓ พบข้อมูล ${(data.pos||[]).length} PO บน Google Sheets`;
-      return;
     } catch(err){
       document.getElementById('apiStatus').textContent =
         'เชื่อมต่อไม่สำเร็จ: ' + err.message + ' · ใช้ข้อมูลที่เก็บไว้ในเบราว์เซอร์นี้แทนไปก่อน';
     }
-  }
-  const persisted = loadPersisted();
-  if (persisted && persisted.pos && persisted.pos.length){
-    usingSample = false;
-    document.getElementById('fileNameLbl').textContent =
-      `กำลังแสดงข้อมูลที่บันทึกไว้ในเบราว์เซอร์นี้ (${persisted.pos.length} PO)`;
-    loadData(persisted.pos, persisted.returns || [], { replace: true, persist: false });
-  } else {
-    usingSample = true;
-    loadData(SAMPLE_DATA.pos, SAMPLE_DATA.returns, { replace: true, persist: false });
   }
 })();
 </script>
