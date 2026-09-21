@@ -124,6 +124,8 @@
     min-height:40px;
   }
   .btn:active{ transform:scale(0.98); }
+  .btn:disabled{ opacity:0.45; cursor:not-allowed; }
+  .btn:disabled:active{ transform:none; }
   .btn-accent{ background:var(--accent); color:#1B0E06; }
   .btn-accent:hover{ opacity:0.92; }
   .btn-ghost{ background:rgba(255,255,255,0.08); color:#F3F1EA; border:1px solid rgba(255,255,255,0.18); }
@@ -337,16 +339,19 @@
         </button>
         <div class="upload-box" id="uploadBox">
           <div class="upload-title">อัปโหลดไฟล์รายงานวันนี้</div>
-          <div class="upload-hint">รองรับไฟล์ GORL 20 (.xlsx) ที่ export จากระบบทุกวัน</div>
+          <div class="upload-hint">รองรับไฟล์ GORL 20 (.xlsx) ที่ export จากระบบทุกวัน · เลือกไฟล์ก่อน แล้วกด "อัปโหลด" อีกครั้งเพื่อยืนยัน</div>
           <div class="upload-row">
-            <button class="btn btn-accent" id="uploadBtn" type="button">เลือกไฟล์ .xlsx</button>
+            <button class="btn btn-ghost" id="uploadBtn" type="button">1) เลือกไฟล์ .xlsx</button>
+            <button class="btn btn-accent" id="confirmUploadBtn" type="button" disabled>2) ⬆ อัปโหลด</button>
             <button class="btn btn-ghost" id="sampleBtn" type="button">ใช้ไฟล์ตัวอย่าง</button>
           </div>
           <input type="file" id="fileInput" accept=".xlsx,.xls">
           <div class="file-name" id="fileNameLbl">ยังไม่ได้อัปโหลด · ลากไฟล์มาวางในกล่องนี้ได้เลย</div>
           <div class="upload-footer-row">
             <button class="link-btn" id="settingsToggle" type="button">⚙ ตั้งค่าฐานข้อมูล (Google Sheets)</button>
-            <button class="link-btn" id="syncNowBtn" type="button">🔄 ซิงค์ล่าสุด</button>
+          </div>
+          <div class="upload-footer-row">
+            <button class="link-btn" id="syncNowBtn" type="button" title="ดึงข้อมูลล่าสุดจาก Google Sheets มาแสดง - ไม่ต้องเลือกไฟล์">🔄 รีเฟรชข้อมูลล่าสุด (ไม่ต้องเลือกไฟล์)</button>
           </div>
         </div>
       </div>
@@ -624,18 +629,26 @@ function renderKPI(stats){
   `;
 }
 
-function matchesSearch(po, term){
-  if (!term) return true;
-  const t = term.toLowerCase();
-  if (str(po.po).toLowerCase().includes(t)) return true;
-  if (str(po.sname).toLowerCase().includes(t)) return true;
-  if (str(po.sc).toLowerCase().includes(t)) return true;
-  if (str(po.gor).toLowerCase().includes(t)) return true;
+// Split so the caller can tell *why* a PO matched: a hit on the PO's own fields (vendor,
+// PO/GOR no.) is already visible in the collapsed row, but a hit that only exists inside
+// the item list is hidden unless that row is expanded.
+function poLevelMatches(po, t){
+  return str(po.po).toLowerCase().includes(t) ||
+    str(po.sname).toLowerCase().includes(t) ||
+    str(po.sc).toLowerCase().includes(t) ||
+    str(po.gor).toLowerCase().includes(t);
+}
+function itemLevelMatches(po, t){
   return po.items.some(it =>
     str(it.d).toLowerCase().includes(t) ||
     str(it.c).toLowerCase().includes(t) ||
     str(it.b).toLowerCase().includes(t)
   );
+}
+function matchesSearch(po, term){
+  if (!term) return true;
+  const t = term.toLowerCase();
+  return poLevelMatches(po, t) || itemLevelMatches(po, t);
 }
 
 function renderList(){
@@ -680,9 +693,13 @@ function renderList(){
 
     const rowId = 'po-' + idx;
     const supplierDisplay = escapeHtml(po.sname || (po.dc ? 'คลังสินค้า DC (ไม่มีชื่อผู้ขาย)' : '-'));
-    // When searching, auto-open every visible PO so a match inside the item list is
-    // immediately visible instead of hidden behind a collapsed row.
-    const autoOpen = !!searchTerm;
+    // Only auto-open a row when the search term matched *inside the item list* and nowhere
+    // in the PO's own visible fields - if it matched on PO no., vendor or GOR no., that's
+    // already shown in the collapsed row, so forcing every match open (e.g. searching a
+    // supplier code that returns many days' worth of POs) would just bury the results the
+    // user is trying to scan under expanded item tables they have to close one by one.
+    // (reuses `t` from above, already lower-cased once per row)
+    const autoOpen = !!searchTerm && !poLevelMatches(po, t) && itemLevelMatches(po, t);
 
     return `
     <tr class="po-row${autoOpen ? ' open' : ''}" data-target="${rowId}">
@@ -932,19 +949,23 @@ document.getElementById('saveApiBtn').addEventListener('click', async () => {
   }
 });
 document.getElementById('syncNowBtn').addEventListener('click', async () => {
+  if (isBusy) return;
   if (!apiUrl){
     document.getElementById('settingsPanel').classList.add('show');
     document.getElementById('apiStatus').textContent = 'กรุณาตั้งค่า Google Sheets ก่อนจึงจะซิงค์ได้';
     return;
   }
-  document.getElementById('fileNameLbl').textContent = 'กำลังซิงค์ข้อมูลล่าสุดจาก Google Sheets...';
+  setBusy(true);
+  document.getElementById('fileNameLbl').textContent = 'กำลังรีเฟรชข้อมูลล่าสุดจาก Google Sheets... (ไม่ได้อัปโหลดไฟล์ใดๆ)';
   try {
     const data = await fetchFromApi();
     usingSample = false;
     loadData(data.pos || [], data.returns || [], { replace: true, persist: true });
-    document.getElementById('fileNameLbl').textContent = `ซิงค์ล่าสุดสำเร็จ (${(data.pos||[]).length} PO)`;
+    document.getElementById('fileNameLbl').textContent = `รีเฟรชสำเร็จ (${(data.pos||[]).length} PO)`;
   } catch(err){
-    document.getElementById('fileNameLbl').textContent = 'ซิงค์ไม่สำเร็จ: ' + err.message;
+    document.getElementById('fileNameLbl').textContent = 'รีเฟรชไม่สำเร็จ: ' + err.message;
+  } finally {
+    setBusy(false);
   }
 });
 
@@ -1107,69 +1128,123 @@ function parseWorkbook(wb){
   return { pos, returns };
 }
 
-/* ---------- Upload handling ---------- */
+/* ---------- Upload handling ----------
+   Two-step by design: picking a file only stages it (and shows its name); nothing is
+   parsed or sent until "2) อัปโหลด" is pressed. This is what stops an admin who double
+   clicks "เลือกไฟล์" or picks the same file twice from silently triggering two uploads -
+   with the old one-step button, opening the file dialog again and re-picking the same
+   file could and did fire a second full upload. Buttons are also disabled for the whole
+   duration of an upload so a second click can't start an overlapping request while the
+   first is still in flight. */
 const uploadBox = document.getElementById('uploadBox');
 const fileInput = document.getElementById('fileInput');
-document.getElementById('uploadBtn').addEventListener('click', () => fileInput.click());
-document.getElementById('sampleBtn').addEventListener('click', () => {
+const uploadBtnEl = document.getElementById('uploadBtn');
+const confirmUploadBtnEl = document.getElementById('confirmUploadBtn');
+const sampleBtnEl = document.getElementById('sampleBtn');
+const syncNowBtnEl = document.getElementById('syncNowBtn');
+let pendingFile = null;
+let isBusy = false;
+
+function setBusy(busy){
+  isBusy = busy;
+  uploadBtnEl.disabled = busy;
+  sampleBtnEl.disabled = busy;
+  syncNowBtnEl.disabled = busy;
+  confirmUploadBtnEl.disabled = busy || !pendingFile;
+}
+
+function stageFile(file){
+  if (!file || isBusy) return;
+  pendingFile = file;
+  clearUploadSuccess();
+  document.getElementById('fileNameLbl').textContent = `เลือกไฟล์แล้ว: ${file.name} · กด "2) อัปโหลด" เพื่อยืนยัน`;
+  confirmUploadBtnEl.disabled = false;
+}
+
+uploadBtnEl.addEventListener('click', () => fileInput.click());
+sampleBtnEl.addEventListener('click', () => {
+  if (isBusy) return;
+  pendingFile = null;
+  confirmUploadBtnEl.disabled = true;
   document.getElementById('fileNameLbl').textContent = 'กำลังแสดงไฟล์ตัวอย่าง';
   usingSample = true;
   loadData(SAMPLE_DATA.pos, SAMPLE_DATA.returns, { replace: true, persist: false });
 });
+confirmUploadBtnEl.addEventListener('click', () => {
+  if (isBusy || !pendingFile) return;
+  const file = pendingFile;
+  pendingFile = null;
+  handleFile(file);
+});
 
 function handleFile(file){
   if (!file) return;
+  setBusy(true);
   clearUploadSuccess();
   document.getElementById('fileNameLbl').textContent = 'กำลังประมวลผล ' + file.name + ' ...';
   const reader = new FileReader();
   reader.onload = async (e) => {
-    let pos, returns;
+    // fileInput is reset up front (not just pendingFile) so choosing the exact same file
+    // again later still fires a 'change' event - browsers otherwise stay silent on
+    // re-selecting an unchanged file path. setBusy(false) is deferred to the outer finally
+    // so it only re-enables the buttons once every awaited step below (including the
+    // Google Sheets save) has actually finished - not just once the file bytes were read.
+    fileInput.value = '';
     try {
-      const data = new Uint8Array(e.target.result);
-      const wb = XLSX.read(data, { type: 'array' });
-      ({ pos, returns } = parseWorkbook(wb));
-      if (!pos.length){
-        document.getElementById('fileNameLbl').textContent = 'ไม่พบรูปแบบรายงาน GORL 20 ในไฟล์นี้ ลองตรวจสอบไฟล์อีกครั้ง';
-        return;
-      }
-    } catch (err){
-      document.getElementById('fileNameLbl').textContent = 'เกิดข้อผิดพลาดในการอ่านไฟล์: ' + err.message;
-      return;
-    }
-
-    if (apiUrl){
-      document.getElementById('fileNameLbl').textContent = 'กำลังบันทึกขึ้น Google Sheets...';
+      let pos, returns;
       try {
-        const fresh = await postToApi(pos, returns);
-        usingSample = false;
-        loadData(fresh.pos || [], fresh.returns || [], { replace: true, persist: true });
-        document.getElementById('fileNameLbl').textContent =
-          `บันทึกขึ้น Google Sheets สำเร็จ (ไฟล์นี้ ${pos.length} PO · รวมทั้งหมด ${(fresh.pos||[]).length} PO)`;
-        markUploadSuccess();
+        const data = new Uint8Array(e.target.result);
+        const wb = XLSX.read(data, { type: 'array' });
+        ({ pos, returns } = parseWorkbook(wb));
+        if (!pos.length){
+          document.getElementById('fileNameLbl').textContent = 'ไม่พบรูปแบบรายงาน GORL 20 ในไฟล์นี้ ลองตรวจสอบไฟล์อีกครั้ง';
+          return;
+        }
+      } catch (err){
+        document.getElementById('fileNameLbl').textContent = 'เกิดข้อผิดพลาดในการอ่านไฟล์: ' + err.message;
         return;
-      } catch(err){
-        document.getElementById('fileNameLbl').textContent =
-          'บันทึกขึ้น Google Sheets ไม่สำเร็จ (' + err.message + ') · เก็บไว้ในเบราว์เซอร์นี้ก่อน';
-        // fall through to the local-only path below so the upload isn't lost
       }
-    }
 
-    const replace = usingSample;
-    usingSample = false;
-    loadData(pos, returns, { replace, persist: true });
-    if (!apiUrl){
-      const daysNow = new Set(masterPOsRaw.map(p => p.rd).filter(Boolean)).size;
-      document.getElementById('fileNameLbl').textContent =
-        `โหลดสำเร็จ: ${file.name} (${pos.length} PO) · มีข้อมูลสะสม ${daysNow} วัน (เก็บในเบราว์เซอร์นี้เท่านั้น)`;
-      markUploadSuccess();
+      if (apiUrl){
+        document.getElementById('fileNameLbl').textContent = 'กำลังบันทึกขึ้น Google Sheets...';
+        try {
+          const fresh = await postToApi(pos, returns);
+          usingSample = false;
+          loadData(fresh.pos || [], fresh.returns || [], { replace: true, persist: true });
+          document.getElementById('fileNameLbl').textContent =
+            `บันทึกขึ้น Google Sheets สำเร็จ (ไฟล์นี้ ${pos.length} PO · รวมทั้งหมด ${(fresh.pos||[]).length} PO)`;
+          markUploadSuccess();
+          return;
+        } catch(err){
+          document.getElementById('fileNameLbl').textContent =
+            'บันทึกขึ้น Google Sheets ไม่สำเร็จ (' + err.message + ') · เก็บไว้ในเบราว์เซอร์นี้ก่อน';
+          // fall through to the local-only path below so the upload isn't lost
+        }
+      }
+
+      const replace = usingSample;
+      usingSample = false;
+      loadData(pos, returns, { replace, persist: true });
+      if (!apiUrl){
+        const daysNow = new Set(masterPOsRaw.map(p => p.rd).filter(Boolean)).size;
+        document.getElementById('fileNameLbl').textContent =
+          `โหลดสำเร็จ: ${file.name} (${pos.length} PO) · มีข้อมูลสะสม ${daysNow} วัน (เก็บในเบราว์เซอร์นี้เท่านั้น)`;
+        markUploadSuccess();
+      }
+    } finally {
+      setBusy(false);
     }
+  };
+  reader.onerror = () => {
+    document.getElementById('fileNameLbl').textContent = 'อ่านไฟล์ไม่สำเร็จ ลองใหม่อีกครั้ง';
+    setBusy(false);
   };
   reader.readAsArrayBuffer(file);
 }
-fileInput.addEventListener('change', e => handleFile(e.target.files[0]));
+fileInput.addEventListener('change', e => stageFile(e.target.files[0]));
 ['dragenter','dragover'].forEach(ev => uploadBox.addEventListener(ev, e => { e.preventDefault(); uploadBox.classList.add('dragover'); }));
 ['dragleave','drop'].forEach(ev => uploadBox.addEventListener(ev, e => { e.preventDefault(); uploadBox.classList.remove('dragover'); }));
-uploadBox.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f) handleFile(f); });
+uploadBox.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f) stageFile(f); });
 
 /* ---------- Init: render something instantly (cache/sample), then refresh from Google
    Sheets in the background ---------- */
