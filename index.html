@@ -270,6 +270,10 @@
   table.items td{ padding:9px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
   table.items tr:last-child td{ border-bottom:none; }
   table.items td.num, table.items th.num{ text-align:right; }
+  table.items tfoot .items-total-row td{
+    border-top:2px solid var(--line-strong); border-bottom:none;
+    font-weight:700; background:color-mix(in srgb, var(--accent-soft) 45%, var(--surface));
+  }
   .item-flag{ display:inline-flex; align-items:center; gap:5px; font-weight:600; font-size:12px; }
   .item-flag .dot{ width:6px; height:6px; border-radius:50%; }
   tr.row-short{ background:color-mix(in srgb, var(--warn-bg) 55%, transparent); }
@@ -729,6 +733,15 @@ function renderList(){
               <th class="num">สั่ง</th><th class="num">รับ</th><th class="num">ผลต่าง</th><th>สถานะ</th>
             </tr></thead>
             <tbody>${itemRows}</tbody>
+            <tfoot>
+              <tr class="items-total-row">
+                <td colspan="3">รวมทั้งหมด (${po.items.length} รายการ)</td>
+                <td class="num">${fmtQty(po.totalO)}</td>
+                <td class="num">${fmtQty(po.totalR)}</td>
+                <td class="num">${po.totalVar>0?'+':''}${fmtQty(po.totalVar)}</td>
+                <td><span class="flag-badge flag-${po.flag}"><span class="dot"></span>${flagLabel(po.flag)}</span></td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       </td>
