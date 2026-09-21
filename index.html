@@ -347,7 +347,6 @@
           <div class="upload-row">
             <button class="btn btn-ghost" id="uploadBtn" type="button">1) เลือกไฟล์ .xlsx</button>
             <button class="btn btn-accent" id="confirmUploadBtn" type="button" disabled>2) ⬆ อัปโหลด</button>
-            <button class="btn btn-ghost" id="sampleBtn" type="button">ใช้ไฟล์ตัวอย่าง</button>
           </div>
           <input type="file" id="fileInput" accept=".xlsx,.xls">
           <div class="file-name" id="fileNameLbl">ยังไม่ได้อัปโหลด · ลากไฟล์มาวางในกล่องนี้ได้เลย</div>
@@ -564,7 +563,6 @@ function classifyItem(o, r){
   if (r > o) return 'over';
   return 'match';
 }
-const SEVERITY = { noorder:4, short:3, over:2, match:1 };
 
 function isDC(sc, sname){
   const code = str(sc).trim();
@@ -576,15 +574,20 @@ function isDC(sc, sname){
 
 function enrich(pos){
   return pos.map(po => {
-    let totalO = 0, totalR = 0, worst = 'match';
+    let totalO = 0, totalR = 0;
     const items = po.items.map(it => {
       const o = num(it.o), r = num(it.r);
       totalO += o; totalR += r;
       const flag = classifyItem(o, r);
-      if (SEVERITY[flag] > SEVERITY[worst]) worst = flag;
       return {...it, o, r, flag, variance: r - o};
     });
-    return {...po, items, totalO, totalR, totalVar: totalR - totalO, flag: worst, dc: isDC(po.sc, po.sname), _rd: parseRptDate(po.rd)};
+    // The PO's own status reflects its NET totals (sum of ordered vs. sum of received),
+    // not the worst individual item - this is what actually answers "did this PO come in
+    // short or over overall", which is what the tabs, KPIs and this row's badge are for.
+    // An item that's individually short or over is still visible per-line in the expanded
+    // detail table below; it just doesn't override the PO-level verdict on its own.
+    const flag = classifyItem(totalO, totalR);
+    return {...po, items, totalO, totalR, totalVar: totalR - totalO, flag, dc: isDC(po.sc, po.sname), _rd: parseRptDate(po.rd)};
   }).sort((a,b) => {
     if (a._rd && b._rd) return b._rd - a._rd; // newest received date first
     return 0;
@@ -1153,7 +1156,6 @@ const uploadBox = document.getElementById('uploadBox');
 const fileInput = document.getElementById('fileInput');
 const uploadBtnEl = document.getElementById('uploadBtn');
 const confirmUploadBtnEl = document.getElementById('confirmUploadBtn');
-const sampleBtnEl = document.getElementById('sampleBtn');
 const syncNowBtnEl = document.getElementById('syncNowBtn');
 let pendingFile = null;
 let isBusy = false;
@@ -1161,7 +1163,6 @@ let isBusy = false;
 function setBusy(busy){
   isBusy = busy;
   uploadBtnEl.disabled = busy;
-  sampleBtnEl.disabled = busy;
   syncNowBtnEl.disabled = busy;
   confirmUploadBtnEl.disabled = busy || !pendingFile;
 }
@@ -1175,14 +1176,6 @@ function stageFile(file){
 }
 
 uploadBtnEl.addEventListener('click', () => fileInput.click());
-sampleBtnEl.addEventListener('click', () => {
-  if (isBusy) return;
-  pendingFile = null;
-  confirmUploadBtnEl.disabled = true;
-  document.getElementById('fileNameLbl').textContent = 'กำลังแสดงไฟล์ตัวอย่าง';
-  usingSample = true;
-  loadData(SAMPLE_DATA.pos, SAMPLE_DATA.returns, { replace: true, persist: false });
-});
 confirmUploadBtnEl.addEventListener('click', () => {
   if (isBusy || !pendingFile) return;
   const file = pendingFile;
